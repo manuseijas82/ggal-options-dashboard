@@ -251,8 +251,8 @@ class GGALDataFetcher:
         return pd.DataFrame(opciones)
 
     # ------------------------------------------------------------------
-    @staticmethod
-    def _parse_ticker(ticker: str):
+@staticmethod
+def _parse_ticker(ticker: str):
     import re
     
     # Patrón: GFG + C/V + strike entero + decimal + código mes
