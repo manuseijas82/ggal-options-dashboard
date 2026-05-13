@@ -1044,5 +1044,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-py ggal.txt
-Mostrando py ggal.txt.
