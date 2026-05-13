@@ -201,7 +201,7 @@ class GGALDataFetcher:
                    "bymadata/free/opciones")
             params = {"subyacente": "GGAL"}
             r = requests.get(url, params=params,
-                             headers=GGALDataFetcher.HEADERS, timeout=10)
+                             headers=GGALDataFetcher.HEADERS, timeout=15, verify=False)
             items = r.json()
 
             for item in items:
