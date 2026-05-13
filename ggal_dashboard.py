@@ -891,7 +891,7 @@ def main():
         st.markdown("## ⚙️ Configuración")
 
         auto_refresh = st.toggle("🔄 Auto-refresh (60s)", value=True)
-        r_libre = st.slider("Tasa libre de riesgo (%)", 0.0, 15.0, 5.0, 0.5) / 100
+        r_libre = st.slider("Tasa libre de riesgo (%)", 0.0, 100.0, 5.0, 0.5) / 100
 
         st.markdown("---")
         st.markdown("### 🔍 Filtros de Alertas")
