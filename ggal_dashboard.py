@@ -253,38 +253,43 @@ class GGALDataFetcher:
     # ------------------------------------------------------------------
     @staticmethod
     def _parse_ticker(ticker: str):
-        """
-        Parsea tickers BYMA de opciones sobre GGAL.
-        Formatos conocidos:
-          GFGC6000OC  →  GGAL CALL 6000 vto Oct
-          GFGV5500SE  →  GGAL PUT  5500 vto Sep
-        """
-        import re
-        # Patrón: GFG + C/V + strike(4-5 dígitos) + mes(2 letras)
-        m = re.match(r'GFG([CV])(\d{3,5})([A-Z]{2})', ticker)
-        if not m:
-            return None, None, None
+    import re
+    
+    # Patrón: GFG + C/V + strike entero + decimal + código mes
+    m = re.match(r'GFG([CV])(\d{3,5})(\d)(F|AB|J|AG|OC|D)', ticker)
+    if not m:
+        return None, None, None
 
-        flag   = 'call' if m.group(1) == 'C' else 'put'
-        strike = float(m.group(2))
-        mes_cod = m.group(3)
+    flag      = 'call' if m.group(1) == 'C' else 'put'
+    entero    = m.group(2)
+    decimal   = m.group(3)
+    mes_cod   = m.group(4)
+    
+    # Strike real con decimal
+    strike = float(f"{entero}.{decimal}")
 
-        # Mapeo de códigos de mes BYMA → número de mes
-        MESES = {
-            'EN':1,'FE':2,'MR':3,'AB':4,'MY':5,'JN':6,
-            'JL':7,'AG':8,'SE':9,'OC':10,'NO':11,'DI':12
-        }
-        mes_num = MESES.get(mes_cod.upper())
-        if mes_num is None:
-            return None, None, None
+    # Mapeo de mes
+    MESES = {
+        'F' : 2,
+        'AB': 4,
+        'J' : 6,
+        'AG': 8,
+        'OC': 10,
+        'D' : 12,
+    }
+    mes_num = MESES.get(mes_cod)
+    if mes_num is None:
+        return None, None, None
 
-        # Tercer viernes del mes (vencimiento estándar BYMA)
-        anio = datetime.today().year
-        if mes_num < datetime.today().month:
-            anio += 1
-        vto = GGALDataFetcher._tercer_viernes(anio, mes_num)
+    # Año del vencimiento
+    anio = datetime.today().year
+    if mes_num < datetime.today().month:
+        anio += 1
 
-        return flag, strike, vto
+    # Tercer viernes del mes
+    vto = GGALDataFetcher._tercer_viernes(anio, mes_num)
+
+    return flag, strike, vto
 
     @staticmethod
     def _tercer_viernes(year, month):
