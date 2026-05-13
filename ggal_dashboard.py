@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import requests
 import time
 import warnings
+urllib3.disabele_warnings(urllib3.exceptions.InsecureRequestWarning)
 warnings.filterwarnings('ignore')
 
 # ============================================================
