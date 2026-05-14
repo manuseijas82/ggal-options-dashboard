@@ -4,7 +4,6 @@ import numpy as np
 from scipy.stats import norm
 from scipy.optimize import brentq
 import plotly.graph_objects as go
-import plotly.express as px
 from datetime import datetime, timedelta
 import requests
 import time
@@ -15,9 +14,6 @@ from urllib3.exceptions import InsecureRequestWarning
 urllib3.disable_warnings(InsecureRequestWarning)
 warnings.filterwarnings('ignore')
 
-# ============================================================
-# CONFIG PÁGINA
-# ============================================================
 st.set_page_config(
     page_title="GGAL Options Scanner",
     page_icon="🎯",
@@ -25,9 +21,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ============================================================
-# CSS
-# ============================================================
 st.markdown("""
 <style>
     .stApp { background-color: #0d1117; color: #e6edf3; }
@@ -56,10 +49,6 @@ st.markdown("""
     }
     .metric-value { font-size:22px; font-weight:700; color:#58a6ff; }
     .metric-label { font-size:11px; color:#8b949e; text-transform:uppercase; letter-spacing:1px; }
-    .tag { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; margin-right:6px; }
-    .tag-call    { background:#1f4e2e; color:#2ea043; }
-    .tag-put     { background:#4e1f1f; color:#f85149; }
-    .tag-neutral { background:#1f3a4e; color:#388bfd; }
     .timestamp   { font-size:11px; color:#484f58; text-align:right; margin-top:6px; }
     .pct-bar { height:6px; border-radius:3px; margin:4px 0; }
     h1,h2,h3 { color:#e6edf3; }
@@ -68,14 +57,10 @@ st.markdown("""
         border:1px solid #30363d; border-radius:8px;
         width:100%;
     }
-    .stButton>button:hover { background:#30363d; border-color:#58a6ff; }
 </style>
 """, unsafe_allow_html=True)
 
 
-# ============================================================
-# BLACK-SCHOLES
-# ============================================================
 class BS:
     @staticmethod
     def d1(S, K, T, r, v):
@@ -102,8 +87,10 @@ class BS:
     @staticmethod
     def iv(price, S, K, T, r, flag='call'):
         try:
-            f = (lambda v: BS.call(S, K, T, r, v) - price) if flag == 'call' \
-                else (lambda v: BS.put(S, K, T, r, v) - price)
+            if flag == 'call':
+                f = lambda v: BS.call(S, K, T, r, v) - price
+            else:
+                f = lambda v: BS.put(S, K, T, r, v) - price
             intr = max(S - K, 0) if flag == 'call' else max(K - S, 0)
             if price <= intr + 1e-4:
                 return 0.001
@@ -144,14 +131,12 @@ class BS:
         return S * norm.pdf(d1) * np.sqrt(T) / 100
 
 
-# ============================================================
-# DATA FETCHER
-# ============================================================
 class GGALDataFetcher:
 
     HEADERS = {
         "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json"
+        "Accept": "application/json",
+        "Referer": "https://open.bymadata.com.ar"
     }
 
     MESES = {
@@ -175,7 +160,6 @@ class GGALDataFetcher:
                 return float(price)
         except:
             pass
-
         try:
             url = "https://open.bymadata.com.ar/vanoms-be-core/rest/api/bymadata/free/bnown/seriesHistoricas/GGAL"
             r = requests.get(url, headers=GGALDataFetcher.HEADERS, timeout=8, verify=False)
@@ -186,74 +170,31 @@ class GGALDataFetcher:
                     return float(price)
         except:
             pass
-
         return None
 
-        @staticmethod
-        @st.cache_data(ttl=60)
-        @staticmethod
-        @st.cache_data(ttl=60)
-def get_opciones_byma(spot):
-    opciones = []
+    @staticmethod
+    @st.cache_data(ttl=60)
+    def get_opciones_byma(spot):
+        opciones = []
 
-    # Fuente 1: BYMA Data API alternativa
-    try:
-        url = "https://open.bymadata.com.ar/vanoms-be-core/rest/api/bymadata/free/opciones-acc"
-        params = {"symbol": "GGAL", "Content-Type": "application/json"}
-        r = requests.get(url, params=params,
-                        headers={
-                            "User-Agent": "Mozilla/5.0",
-                            "Accept": "application/json",
-                            "Referer": "https://open.bymadata.com.ar"
-                        },
-                        timeout=15, verify=False)
-        if r.status_code == 200 and len(r.text) > 10:
-            items = r.json()
-            for item in items:
-                try:
-                    ticker  = item.get('symbol', '').upper()
-                    precio  = float(item.get('trade', item.get('c', 0)) or 0)
-                    vol_op  = int(item.get('volumenNominal', item.get('v', 0)) or 0)
-                    oi      = int(item.get('openInterest', item.get('oi', 0)) or 0)
-                    if precio <= 0:
-                        continue
-                    flag, strike, vto = GGALDataFetcher._parse_ticker(ticker)
-                    if flag is None:
-                        continue
-                    dias = (vto - datetime.today()).days
-                    if dias < 1:
-                        continue
-                    opciones.append({
-                        'ticker': ticker,
-                        'tipo'  : flag,
-                        'strike': strike,
-                        'precio': precio,
-                        'vol_op': vol_op,
-                        'oi'    : oi,
-                        'dias'  : dias,
-                        'vto'   : vto.strftime('%d/%m/%Y'),
-                    })
-                except:
-                    continue
-    except Exception as e:
-        st.warning(f"⚠️ BYMA API 1: {e}")
-
-    # Fuente 2: IOL API
-    if not opciones:
         try:
-            url = "https://api.invertironline.com/api/v2/Cotizacion/opciones/BCBA/GGAL"
-            r = requests.get(url,
-                            headers={"User-Agent": "Mozilla/5.0",
-                                     "Accept": "application/json"},
-                            timeout=15, verify=False)
+            url = "https://open.bymadata.com.ar/vanoms-be-core/rest/api/bymadata/free/opciones-acc"
+            params = {"symbol": "GGAL"}
+            r = requests.get(
+                url,
+                params=params,
+                headers=GGALDataFetcher.HEADERS,
+                timeout=15,
+                verify=False
+            )
             if r.status_code == 200 and len(r.text) > 10:
                 items = r.json()
                 for item in items:
                     try:
-                        ticker  = item.get('simbolo', '').upper()
-                        precio  = float(item.get('ultimoPrecio', 0) or 0)
-                        vol_op  = int(item.get('cantidadOperaciones', 0) or 0)
-                        oi      = int(item.get('openInterest', 0) or 0)
+                        ticker = item.get('symbol', '').upper()
+                        precio = float(item.get('trade', item.get('c', 0)) or 0)
+                        vol_op = int(item.get('volumenNominal', item.get('v', 0)) or 0)
+                        oi = int(item.get('openInterest', item.get('oi', 0)) or 0)
                         if precio <= 0:
                             continue
                         flag, strike, vto = GGALDataFetcher._parse_ticker(ticker)
@@ -264,48 +205,82 @@ def get_opciones_byma(spot):
                             continue
                         opciones.append({
                             'ticker': ticker,
-                            'tipo'  : flag,
+                            'tipo': flag,
                             'strike': strike,
                             'precio': precio,
                             'vol_op': vol_op,
-                            'oi'    : oi,
-                            'dias'  : dias,
-                            'vto'   : vto.strftime('%d/%m/%Y'),
+                            'oi': oi,
+                            'dias': dias,
+                            'vto': vto.strftime('%d/%m/%Y'),
                         })
                     except:
                         continue
         except Exception as e:
-            st.warning(f"⚠️ IOL API: {e}")
+            st.warning(f"⚠️ BYMA API 1: {e}")
 
-    # Fallback sintético
-    if not opciones and spot:
-        st.info("📊 Usando datos sintéticos (APIs no disponibles)")
-        opciones = GGALDataFetcher._cadena_sintetica(spot)
+        if not opciones:
+            try:
+                url = "https://api.invertironline.com/api/v2/Cotizacion/opciones/BCBA/GGAL"
+                r = requests.get(
+                    url,
+                    headers=GGALDataFetcher.HEADERS,
+                    timeout=15,
+                    verify=False
+                )
+                if r.status_code == 200 and len(r.text) > 10:
+                    items = r.json()
+                    for item in items:
+                        try:
+                            ticker = item.get('simbolo', '').upper()
+                            precio = float(item.get('ultimoPrecio', 0) or 0)
+                            vol_op = int(item.get('cantidadOperaciones', 0) or 0)
+                            oi = int(item.get('openInterest', 0) or 0)
+                            if precio <= 0:
+                                continue
+                            flag, strike, vto = GGALDataFetcher._parse_ticker(ticker)
+                            if flag is None:
+                                continue
+                            dias = (vto - datetime.today()).days
+                            if dias < 1:
+                                continue
+                            opciones.append({
+                                'ticker': ticker,
+                                'tipo': flag,
+                                'strike': strike,
+                                'precio': precio,
+                                'vol_op': vol_op,
+                                'oi': oi,
+                                'dias': dias,
+                                'vto': vto.strftime('%d/%m/%Y'),
+                            })
+                        except:
+                            continue
+            except Exception as e:
+                st.warning(f"⚠️ IOL API: {e}")
 
-    return pd.DataFrame(opciones)
+        if not opciones and spot:
+            st.info("📊 Usando datos sintéticos (APIs no disponibles)")
+            opciones = GGALDataFetcher._cadena_sintetica(spot)
+
+        return pd.DataFrame(opciones)
+
     @staticmethod
     def _parse_ticker(ticker):
         m = re.match(r'GFG([CV])(\d+)(F|AB|J|AG|OC|D)$', ticker)
         if not m:
             return None, None, None
-
         flag = 'call' if m.group(1) == 'C' else 'put'
         digits = m.group(2)
-        mes_cod = m.group(3) #todos los digitos juntos
-
-        # El ultimo digito e el decimal
+        mes_cod = m.group(3)
         entero = digits[:-1]
         decimal = digits[-1]
         strike = float(f"{entero}.{decimal}")
-
         mes_num = GGALDataFetcher.MESES.get(mes_cod)
         if mes_num is None:
             return None, None, None
-
         anio = datetime.today().year
         if mes_num < datetime.today().month:
             anio += 1
-
         vto = GGALDataFetcher._tercer_viernes(anio, mes_num)
         return flag, strike, vto
 
@@ -346,9 +321,6 @@ def get_opciones_byma(spot):
         return rows
 
 
-# ============================================================
-# MOTOR DE ALERTAS
-# ============================================================
 class AlertEngine:
 
     def __init__(self, df, spot, r=0.05):
@@ -364,7 +336,6 @@ class AlertEngine:
             iv_val = BS.iv(row['precio'], self.spot, row['strike'], T, self.r, row['tipo'])
             ivs.append(iv_val)
         self.df['iv'] = ivs
-
         for flag in ['call', 'put']:
             mask = self.df['tipo'] == flag
             vals = self.df.loc[mask, 'iv'].dropna()
@@ -398,7 +369,6 @@ class AlertEngine:
             precios = sub['precio'].values
             ivs = sub['iv'].values if 'iv' in sub.columns else [np.nan] * len(strikes)
             iv_pcts = sub['iv_pct'].values if 'iv_pct' in sub.columns else [50] * len(strikes)
-
             for i in range(len(strikes) - 1):
                 for j in range(i + 1, len(strikes)):
                     k1, k2 = strikes[i], strikes[j]
@@ -441,7 +411,6 @@ class AlertEngine:
             precios = sub['precio'].values
             ivs = sub['iv'].values if 'iv' in sub.columns else [np.nan] * len(strikes)
             iv_pcts = sub['iv_pct'].values if 'iv_pct' in sub.columns else [50] * len(strikes)
-
             for i in range(len(strikes) - 1):
                 for j in range(i + 1, len(strikes)):
                     k1, k2 = strikes[i], strikes[j]
@@ -481,7 +450,6 @@ class AlertEngine:
         sub = self._pares('call')
         strikes = sub['strike'].values
         precios = sub['precio'].values
-
         for i in range(len(strikes) - 1):
             k1, k2 = strikes[i], strikes[i + 1]
             p1, p2 = precios[i], precios[i + 1]
@@ -520,7 +488,6 @@ class AlertEngine:
         sub = self._pares('put')
         strikes = sub['strike'].values
         precios = sub['precio'].values
-
         for i in range(len(strikes) - 1):
             k1, k2 = strikes[i], strikes[i + 1]
             p1, p2 = precios[i], precios[i + 1]
@@ -558,11 +525,9 @@ class AlertEngine:
         alertas = []
         calls = self.df[self.df['tipo'] == 'call']
         puts = self.df[self.df['tipo'] == 'put']
-
         for _, crow in calls.iterrows():
             kc, pc = crow['strike'], crow['precio']
             ivc = crow['iv'] if 'iv' in crow and not np.isnan(crow['iv']) else 0
-
             same = puts[puts['strike'] == kc]
             if not same.empty:
                 prow = same.iloc[0]
@@ -571,12 +536,10 @@ class AlertEngine:
                 total = pc + pp
                 be_pct = total / kc * 100
                 iv_avg = (ivc + ivp) / 2
-
                 tag = 'VENDIDO' if iv_avg > 0.55 else 'COMPRADO'
                 cc = 'card-warning' if tag == 'VENDIDO' else 'card-entry'
                 sc = '#d29922' if tag == 'VENDIDO' else '#2ea043'
                 pct = min(iv_avg * 130, 99)
-
                 alertas.append({
                     'tipo': f'STRADDLE_{tag}',
                     'card_class': cc,
@@ -597,11 +560,9 @@ class AlertEngine:
                     'percentil': pct,
                     'timestamp': datetime.now().strftime('%H:%M'),
                 })
-
             for _, prow in puts.iterrows():
                 kp, pp = prow['strike'], prow['precio']
                 ivp = prow['iv'] if 'iv' in prow and not np.isnan(prow['iv']) else 0
-
                 if kc <= self.spot or kp >= self.spot:
                     continue
                 if kc == kp:
@@ -610,14 +571,12 @@ class AlertEngine:
                 dk_p = (self.spot - kp) / self.spot
                 if dk_c > 0.12 or dk_p > 0.12:
                     continue
-
                 total = pc + pp
                 iv_avg = (ivc + ivp) / 2
                 tag = 'VENDIDO' if iv_avg > 0.50 else 'COMPRADO'
                 cc = 'card-warning' if tag == 'VENDIDO' else 'card-info'
                 sc = '#d29922' if tag == 'VENDIDO' else '#388bfd'
                 pct = min(iv_avg * 120, 99)
-
                 alertas.append({
                     'tipo': f'STRANGLE_{tag}',
                     'card_class': cc,
@@ -687,21 +646,15 @@ class AlertEngine:
         return alertas
 
 
-# ============================================================
-# UI COMPONENTS
-# ============================================================
 def render_alert_card(a):
     pct = a.get('percentil', 0)
     bar_w = min(int(pct), 100)
     bar_c = ('#f85149' if pct >= 75 else
              '#d29922' if pct >= 50 else
              '#2ea043' if pct >= 25 else '#388bfd')
-
     iv_k1 = a.get('iv_k1', '—')
     iv_k2 = a.get('iv_k2', '—')
-    iv_str = (f"<br>📊 IV: <b>{iv_k1}%</b> / <b>{iv_k2}%</b>"
-              if iv_k1 != '—' else '')
-
+    iv_str = f"<br>📊 IV: <b>{iv_k1}%</b> / <b>{iv_k2}%</b>" if iv_k1 != '—' else ''
     html = f"""
     <div class="alert-card {a['card_class']}">
       <div class="alert-title">{a['titulo']}</div>
@@ -739,7 +692,6 @@ def render_cadena_table(df, spot):
         else ('🔴 OTM' if (r['tipo'] == 'call' and r['strike'] > spot) or
                           (r['tipo'] == 'put' and r['strike'] < spot)
               else '🟡 ATM'), axis=1)
-
     cols_show = [c for c in ['ticker', 'tipo', 'strike', 'precio', 'iv',
                               'iv_pct', 'vol_op', 'oi', 'vto', 'moneyness']
                  if c in df.columns]
@@ -793,11 +745,9 @@ def render_payoff(alerta, spot):
     precio = alerta['precio']
     S_range = np.linspace(spot * 0.7, spot * 1.3, 300)
     payoff = np.zeros_like(S_range)
-
     try:
         parts = bases.replace('CALL', 'C').replace('PUT', 'P').split('/')
         ks = [float(p.strip().split()[-1]) for p in parts]
-
         if 'BULL CALL' in strat:
             k1, k2 = ks[0], ks[1]
             payoff = np.maximum(S_range - k1, 0) - np.maximum(S_range - k2, 0) - precio
@@ -830,7 +780,6 @@ def render_payoff(alerta, spot):
                 payoff = np.maximum(k1 - S_range, 0) - 2 * np.maximum(k2 - S_range, 0) + precio
     except:
         pass
-
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=S_range, y=payoff,
@@ -855,9 +804,6 @@ def render_payoff(alerta, spot):
     st.plotly_chart(fig, use_container_width=True)
 
 
-# ============================================================
-# MAIN
-# ============================================================
 def main():
     st.markdown("""
     <h1 style='text-align:center; color:#58a6ff; margin-bottom:0'>
@@ -873,7 +819,6 @@ def main():
         st.markdown("## ⚙️ Configuración")
         auto_refresh = st.toggle("🔄 Auto-refresh (60s)", value=True)
         r_libre = st.slider("Tasa libre de riesgo (%)", 0.0, 100.0, 5.0, 0.5) / 100
-
         st.markdown("---")
         st.markdown("### 🔍 Filtros de Alertas")
         min_pct = st.slider("Percentil mínimo", 0, 100, 50)
@@ -888,7 +833,6 @@ def main():
                      'STRANGLE_VENDIDO', 'STRANGLE_COMPRADO',
                      'IV_ALTA', 'IV_BAJA']
         )
-
         st.markdown("---")
         st.markdown("### 📅 Vencimiento activo")
         vto_fecha = st.date_input(
@@ -896,17 +840,14 @@ def main():
             value=datetime(2026, 6, 19).date()
         )
         st.caption(f"Días al vto: {(datetime.combine(vto_fecha, datetime.min.time()) - datetime.today()).days}")
-
         st.markdown("---")
         st.markdown("### 📅 Filtro días")
         dias_min = st.slider("Días mínimos a vto", 1, 30, 5)
         dias_max = st.slider("Días máximos a vto", 10, 120, 60)
-
         st.markdown("---")
         if st.button("🔄 Actualizar ahora"):
             st.cache_data.clear()
             st.rerun()
-
         st.caption(f"🕐 {datetime.now().strftime('%H:%M:%S')}")
 
     with st.spinner("📡 Obteniendo datos de mercado..."):
