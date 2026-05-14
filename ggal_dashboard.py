@@ -191,22 +191,69 @@ class GGALDataFetcher:
 
     @staticmethod
     @st.cache_data(ttl=60)
-    def get_opciones_byma(spot):
-        opciones = []
+    @staticmethod
+@st.cache_data(ttl=60)
+def get_opciones_byma(spot):
+    opciones = []
 
+    # Fuente 1: BYMA Data API alternativa
+    try:
+        url = "https://open.bymadata.com.ar/vanoms-be-core/rest/api/bymadata/free/opciones-acc"
+        params = {"symbol": "GGAL", "Content-Type": "application/json"}
+        r = requests.get(url, params=params,
+                        headers={
+                            "User-Agent": "Mozilla/5.0",
+                            "Accept": "application/json",
+                            "Referer": "https://open.bymadata.com.ar"
+                        },
+                        timeout=15, verify=False)
+        if r.status_code == 200 and len(r.text) > 10:
+            items = r.json()
+            for item in items:
+                try:
+                    ticker  = item.get('symbol', '').upper()
+                    precio  = float(item.get('trade', item.get('c', 0)) or 0)
+                    vol_op  = int(item.get('volumenNominal', item.get('v', 0)) or 0)
+                    oi      = int(item.get('openInterest', item.get('oi', 0)) or 0)
+                    if precio <= 0:
+                        continue
+                    flag, strike, vto = GGALDataFetcher._parse_ticker(ticker)
+                    if flag is None:
+                        continue
+                    dias = (vto - datetime.today()).days
+                    if dias < 1:
+                        continue
+                    opciones.append({
+                        'ticker': ticker,
+                        'tipo'  : flag,
+                        'strike': strike,
+                        'precio': precio,
+                        'vol_op': vol_op,
+                        'oi'    : oi,
+                        'dias'  : dias,
+                        'vto'   : vto.strftime('%d/%m/%Y'),
+                    })
+                except:
+                    continue
+    except Exception as e:
+        st.warning(f"⚠️ BYMA API 1: {e}")
+
+    # Fuente 2: IOL API
+    if not opciones:
         try:
-            url = "https://open.bymadata.com.ar/vanoms-be-core/rest/api/bymadata/free/opciones"
-            params = {"subyacente": "GGAL"}
-            r = requests.get(url, params=params, headers=GGALDataFetcher.HEADERS,
-                             timeout=15, verify=False)
+            url = "https://api.invertironline.com/api/v2/Cotizacion/opciones/BCBA/GGAL"
+            r = requests.get(url,
+                            headers={"User-Agent": "Mozilla/5.0",
+                                     "Accept": "application/json"},
+                            timeout=15, verify=False)
             if r.status_code == 200 and len(r.text) > 10:
                 items = r.json()
                 for item in items:
                     try:
-                        ticker = item.get('symbol', '').upper()
-                        precio = float(item.get('trade', item.get('c', 0)) or 0)
-                        vol_op = int(item.get('volumenNominal', item.get('v', 0)) or 0)
-                        oi = int(item.get('openInterest', item.get('oi', 0)) or 0)
+                        ticker  = item.get('simbolo', '').upper()
+                        precio  = float(item.get('ultimoPrecio', 0) or 0)
+                        vol_op  = int(item.get('cantidadOperaciones', 0) or 0)
+                        oi      = int(item.get('openInterest', 0) or 0)
                         if precio <= 0:
                             continue
                         flag, strike, vto = GGALDataFetcher._parse_ticker(ticker)
@@ -217,25 +264,25 @@ class GGALDataFetcher:
                             continue
                         opciones.append({
                             'ticker': ticker,
-                            'tipo': flag,
+                            'tipo'  : flag,
                             'strike': strike,
                             'precio': precio,
                             'vol_op': vol_op,
-                            'oi': oi,
-                            'dias': dias,
-                            'vto': vto.strftime('%d/%m/%Y'),
+                            'oi'    : oi,
+                            'dias'  : dias,
+                            'vto'   : vto.strftime('%d/%m/%Y'),
                         })
                     except:
                         continue
         except Exception as e:
-            st.warning(f"⚠️ BYMA API: {e}")
+            st.warning(f"⚠️ IOL API: {e}")
 
-        if not opciones and spot:
-            st.info("📊 Usando datos sintéticos (APIs no disponibles)")
-            opciones = GGALDataFetcher._cadena_sintetica(spot)
+    # Fallback sintético
+    if not opciones and spot:
+        st.info("📊 Usando datos sintéticos (APIs no disponibles)")
+        opciones = GGALDataFetcher._cadena_sintetica(spot)
 
-        return pd.DataFrame(opciones)
-
+    return pd.DataFrame(opciones)
     @staticmethod
     def _parse_ticker(ticker):
         m = re.match(r'GFG([CV])(\d+)(F|AB|J|AG|OC|D)$', ticker)
