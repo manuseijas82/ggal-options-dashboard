@@ -238,15 +238,17 @@ class GGALDataFetcher:
 
     @staticmethod
     def _parse_ticker(ticker):
-        m = re.match(r'GFG([CV])(\d{3,5})(\d)(F|AB|J|AG|OC|D)$', ticker)
+        m = re.match(r'GFG([CV])(\d+)(F|AB|J|AG|OC|D)$', ticker)
         if not m:
             return None, None, None
 
         flag = 'call' if m.group(1) == 'C' else 'put'
-        entero = m.group(2)
-        decimal = m.group(3)
-        mes_cod = m.group(4)
+        digits = m.group(2)
+        mes_cod = m.group(3) #todos los digitos juntos
 
+        # El ultimo digito e el decimal
+        entero = digits[:-1]
+        decimal = digits[-1]
         strike = float(f"{entero}.{decimal}")
 
         mes_num = GGALDataFetcher.MESES.get(mes_cod)
