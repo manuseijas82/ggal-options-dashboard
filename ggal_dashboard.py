@@ -189,10 +189,10 @@ class GGALDataFetcher:
 
         return None
 
-    @staticmethod
-    @st.cache_data(ttl=60)
-    @staticmethod
-@st.cache_data(ttl=60)
+        @staticmethod
+        @st.cache_data(ttl=60)
+        @staticmethod
+        @st.cache_data(ttl=60)
 def get_opciones_byma(spot):
     opciones = []
 
